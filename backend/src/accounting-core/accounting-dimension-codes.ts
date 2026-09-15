@@ -1,0 +1,133 @@
+/**
+ * Stable dimension codes (spec section 26) — the same set of subconto
+ * definitions every tenant gets seeded with. Kept as constants (never a
+ * hardcoded string scattered through services) so a typo becomes a
+ * compile error, not a silent mismatch at posting time.
+ */
+export const DimensionCodes = {
+  ORGANIZATION: 'ORGANIZATION',
+  BRANCH: 'BRANCH',
+  DEPARTMENT: 'DEPARTMENT',
+  WAREHOUSE: 'WAREHOUSE',
+  CASHBOX: 'CASHBOX',
+  BANK_ACCOUNT: 'BANK_ACCOUNT',
+  PARTNER: 'PARTNER',
+  COUNTERPARTY: 'COUNTERPARTY',
+  CONTRACT: 'CONTRACT',
+  AGREEMENT: 'AGREEMENT',
+  PRODUCT: 'PRODUCT',
+  PRODUCT_CHARACTERISTIC: 'PRODUCT_CHARACTERISTIC',
+  CURRENCY: 'CURRENCY',
+  SETTLEMENT_DOCUMENT: 'SETTLEMENT_DOCUMENT',
+  FIXED_ASSET: 'FIXED_ASSET',
+  EMPLOYMENT: 'EMPLOYMENT',
+  COST_CENTER: 'COST_CENTER',
+  PRODUCTION_ORDER: 'PRODUCTION_ORDER',
+} as const;
+
+export type DimensionCode = (typeof DimensionCodes)[keyof typeof DimensionCodes];
+
+/** Reference-entity type recorded on each dimension value (spec section 30
+ * "never store arbitrary entity IDs without type enforcement") — deliberately
+ * the same string as the dimension code for the entities we seed, since each
+ * seeded dimension maps 1:1 to exactly one entity type today. */
+export const DIMENSION_REFERENCE_ENTITY_TYPE: Record<string, string> = {
+  [DimensionCodes.ORGANIZATION]: 'ORGANIZATION',
+  [DimensionCodes.BRANCH]: 'BRANCH',
+  [DimensionCodes.DEPARTMENT]: 'DEPARTMENT',
+  [DimensionCodes.WAREHOUSE]: 'WAREHOUSE',
+  [DimensionCodes.CASHBOX]: 'CASHBOX',
+  [DimensionCodes.BANK_ACCOUNT]: 'BANK_ACCOUNT',
+  [DimensionCodes.PARTNER]: 'COUNTERPARTY',
+  [DimensionCodes.COUNTERPARTY]: 'COUNTERPARTY',
+  [DimensionCodes.CONTRACT]: 'COUNTERPARTY',
+  [DimensionCodes.AGREEMENT]: 'COUNTERPARTY',
+  [DimensionCodes.PRODUCT]: 'PRODUCT',
+  [DimensionCodes.PRODUCT_CHARACTERISTIC]: 'PRODUCT',
+  [DimensionCodes.CURRENCY]: 'CURRENCY',
+  [DimensionCodes.SETTLEMENT_DOCUMENT]: 'SETTLEMENT_DOCUMENT',
+  [DimensionCodes.FIXED_ASSET]: 'FIXED_ASSET',
+  [DimensionCodes.EMPLOYMENT]: 'EMPLOYMENT',
+  [DimensionCodes.COST_CENTER]: 'COST_CENTER',
+  [DimensionCodes.PRODUCTION_ORDER]: 'PRODUCTION_ORDER',
+};
+
+/**
+ * Semantic accounting-mapping keys (spec sections 39-40) — business modules
+ * resolve through AccountingMappingService.resolve(...) using one of these,
+ * never a literal account code.
+ */
+export const MappingKeys = {
+  CASH: 'CASH',
+  BANK: 'BANK',
+  MATERIAL_INVENTORY: 'MATERIAL_INVENTORY',
+  FINISHED_GOODS: 'FINISHED_GOODS',
+  GOODS_INVENTORY: 'GOODS_INVENTORY',
+  CUSTOMER_RECEIVABLE: 'CUSTOMER_RECEIVABLE',
+  SUPPLIER_ADVANCE: 'SUPPLIER_ADVANCE',
+  CUSTOMER_ADVANCE: 'CUSTOMER_ADVANCE',
+  SUPPLIER_PAYABLE: 'SUPPLIER_PAYABLE',
+  SALES_REVENUE: 'SALES_REVENUE',
+  SALES_RETURN: 'SALES_RETURN',
+  SALES_DISCOUNT: 'SALES_DISCOUNT',
+  COGS: 'COGS',
+  COMMERCIAL_EXPENSE: 'COMMERCIAL_EXPENSE',
+  ADMIN_EXPENSE: 'ADMIN_EXPENSE',
+  OTHER_OPERATING_INCOME: 'OTHER_OPERATING_INCOME',
+  OTHER_OPERATING_EXPENSE: 'OTHER_OPERATING_EXPENSE',
+  CURRENT_INCOME_TAX_EXPENSE: 'CURRENT_INCOME_TAX_EXPENSE',
+  // Tax Engine build (docx spec Phase 5, section 38)
+  VAT_INPUT_RECOVERABLE: 'VAT_INPUT_RECOVERABLE',
+  VAT_INPUT_PENDING: 'VAT_INPUT_PENDING',
+  VAT_INPUT_NONRECOVERABLE: 'VAT_INPUT_NONRECOVERABLE',
+  VAT_OUTPUT_PAYABLE: 'VAT_OUTPUT_PAYABLE',
+  VAT_DEPOSIT_ACCOUNT: 'VAT_DEPOSIT_ACCOUNT',
+  VAT_SETTLEMENT: 'VAT_SETTLEMENT',
+  VAT_ROUNDING: 'VAT_ROUNDING',
+  VAT_ADJUSTMENT: 'VAT_ADJUSTMENT',
+  // Purchase / Procurement build (docx spec Phase 9, section 5 Model A)
+  GOODS_RECEIVED_NOT_INVOICED: 'GOODS_RECEIVED_NOT_INVOICED',
+  // Cash build (docx spec Phase 15, sections 53-54) — physical-count
+  // over/short GL legs, falls back to OTHER_OPERATING_INCOME/EXPENSE at
+  // resolve time (AccountingMappingService) if a tenant hasn't seeded these.
+  CASH_SURPLUS: 'CASH_SURPLUS',
+  CASH_SHORTAGE: 'CASH_SHORTAGE',
+  // Fixed Assets build (docx spec Phase 16, section 86)
+  FIXED_ASSET_COST: 'FIXED_ASSET_COST',
+  FIXED_ASSET_CIP: 'FIXED_ASSET_CIP',
+  ACCUMULATED_DEPRECIATION: 'ACCUMULATED_DEPRECIATION',
+  DEPRECIATION_EXPENSE: 'DEPRECIATION_EXPENSE',
+  FIXED_ASSET_IMPAIRMENT_LOSS: 'FIXED_ASSET_IMPAIRMENT_LOSS',
+  ACCUMULATED_IMPAIRMENT: 'ACCUMULATED_IMPAIRMENT',
+  REVALUATION_SURPLUS: 'REVALUATION_SURPLUS',
+  FIXED_ASSET_DISPOSAL_GAIN: 'FIXED_ASSET_DISPOSAL_GAIN',
+  FIXED_ASSET_DISPOSAL_LOSS: 'FIXED_ASSET_DISPOSAL_LOSS',
+  // Payroll build (docx spec Phase 19, section 116)
+  SALARY_EXPENSE: 'SALARY_EXPENSE',
+  EMPLOYEE_NET_PAYABLE: 'EMPLOYEE_NET_PAYABLE',
+  INCOME_TAX_PAYABLE: 'INCOME_TAX_PAYABLE',
+  SOCIAL_INSURANCE_PAYABLE: 'SOCIAL_INSURANCE_PAYABLE',
+  UNEMPLOYMENT_INSURANCE_PAYABLE: 'UNEMPLOYMENT_INSURANCE_PAYABLE',
+  MEDICAL_INSURANCE_PAYABLE: 'MEDICAL_INSURANCE_PAYABLE',
+  OTHER_DEDUCTION_PAYABLE: 'OTHER_DEDUCTION_PAYABLE',
+  EMPLOYER_CONTRIBUTION_EXPENSE: 'EMPLOYER_CONTRIBUTION_EXPENSE',
+  // Expense Management build (docx spec Phase 20)
+  EMPLOYEE_EXPENSE_PAYABLE: 'EMPLOYEE_EXPENSE_PAYABLE',
+  PREPAID_EXPENSE: 'PREPAID_EXPENSE',
+  EXPENSE_ALLOCATION_CLEARING: 'EXPENSE_ALLOCATION_CLEARING',
+  // Manufacturing build (docx spec Phase 21, section 37)
+  WORK_IN_PROGRESS: 'WORK_IN_PROGRESS',
+  PRODUCTION_OVERHEAD_APPLIED: 'PRODUCTION_OVERHEAD_APPLIED',
+  SCRAP_LOSS_EXPENSE: 'SCRAP_LOSS_EXPENSE',
+  // Month Close / Period Close Orchestrator build (docx spec Phase 22,
+  // sections 51, 56-58, 63-65, 105)
+  FX_UNREALIZED_GAIN: 'FX_UNREALIZED_GAIN',
+  FX_UNREALIZED_LOSS: 'FX_UNREALIZED_LOSS',
+  ACCRUED_LIABILITY: 'ACCRUED_LIABILITY',
+  ACCRUED_RECEIVABLE: 'ACCRUED_RECEIVABLE',
+  DEFERRED_REVENUE: 'DEFERRED_REVENUE',
+  RETAINED_EARNINGS: 'RETAINED_EARNINGS',
+  CURRENT_PERIOD_RESULT: 'CURRENT_PERIOD_RESULT',
+} as const;
+
+export type MappingKey = (typeof MappingKeys)[keyof typeof MappingKeys];
