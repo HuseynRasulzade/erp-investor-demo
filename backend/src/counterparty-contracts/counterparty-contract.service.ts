@@ -18,6 +18,16 @@ function round2(v: Decimal): Decimal {
   return new Decimal(v.toFixed(2));
 }
 
+/** Converts a PO line's amount-based discount into the percent
+ * CounterpartyContractLine.discountPercent expects (its own math is
+ * percent-of-gross, not a stored amount — see recalculateLine). */
+function poLineDiscountPercent(poLine: { price: Decimal | null; quantity: Decimal; discountAmount: Decimal }): Decimal {
+  if (!poLine.price || poLine.discountAmount.lte(0)) return new Decimal(0);
+  const gross = poLine.quantity.mul(poLine.price);
+  if (gross.lte(0)) return new Decimal(0);
+  return Decimal.min(new Decimal(100), poLine.discountAmount.div(gross).mul(100));
+}
+
 /**
  * CounterpartyContract service ("Kontragentlər" module, spec sections 5,
  * 8, 10-14). Plain CRUD + a bespoke approval gate, same non-posting
@@ -208,7 +218,7 @@ export class CounterpartyContractService {
       data: {
         tenantId, contractId, position: (maxPosition._max.position ?? -1) + 1,
         productId: poLine.productId, description: poLine.description, quantity,
-        unitId: poLine.unitId, unitPrice: poLine.price ?? 0, discountPercent: 0,
+        unitId: poLine.unitId, unitPrice: poLine.price ?? 0, discountPercent: poLineDiscountPercent(poLine),
         sourceOrderLineId: poLine.id,
         sourcePoTaxRatePercent: poLine.taxRate, sourcePoTaxAmount: poLine.taxAmount,
       },
@@ -601,7 +611,7 @@ export class CounterpartyContractService {
         data: {
           tenantId, contractId: contract.id, position: index,
           productId: poLine.productId, description: poLine.description, quantity,
-          unitId: poLine.unitId, unitPrice: poLine.price ?? 0, discountPercent: 0,
+          unitId: poLine.unitId, unitPrice: poLine.price ?? 0, discountPercent: poLineDiscountPercent(poLine),
           sourceOrderLineId: poLine.id,
           // Snapshot of the PO's own tax, compared against the live
           // recalculation below (and every later recalc) to surface a
@@ -700,7 +710,7 @@ export class CounterpartyContractService {
         data: {
           tenantId, contractId, position: index,
           productId: poLine.productId, description: poLine.description, quantity,
-          unitId: poLine.unitId, unitPrice: poLine.price ?? 0, discountPercent: 0,
+          unitId: poLine.unitId, unitPrice: poLine.price ?? 0, discountPercent: poLineDiscountPercent(poLine),
           sourceOrderLineId: poLine.id,
           sourcePoTaxRatePercent: poLine.taxRate, sourcePoTaxAmount: poLine.taxAmount,
         },

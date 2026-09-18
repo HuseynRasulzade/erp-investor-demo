@@ -263,6 +263,29 @@ describe('Procurement (e2e)', () => {
     });
   });
 
+  describe('Purchase Order line discount', () => {
+    it('applies a line discount before tax, and carries a proportional discount percent onto a contract created from the order', async () => {
+      const po = await auth1(request(app.getHttpServer()).post(`/organizations/${org1Id}/purchase-orders`))
+        .send({ counterpartyId: supplierId, documentDate: DOC_DATE, warehouseId, lines: [{ productId, unitId, quantity: 10, price: 20, taxRate: 18, discountAmount: 15 }] })
+        .expect(201);
+      // gross = 10*20 = 200; net = 200-15 = 185; tax = 185*0.18 = 33.3
+      expect(Number(po.body.lines[0].discountAmount)).toBeCloseTo(15, 2);
+      expect(Number(po.body.lines[0].lineTotal)).toBeCloseTo(185, 2);
+      expect(Number(po.body.lines[0].taxAmount)).toBeCloseTo(33.3, 2);
+
+      await fullyApprovePurchaseOrder(org1Id, po.body.id);
+      const confirmed = await auth1(request(app.getHttpServer()).post(`/organizations/${org1Id}/purchase-orders/${po.body.id}/confirm`))
+        .send({ expectedVersion: po.body.version })
+        .expect(201);
+
+      const contract = await auth1(request(app.getHttpServer()).post(`/organizations/${org1Id}/contracts/from-purchase-order`))
+        .send({ purchaseOrderId: po.body.id, number: `C-DISC-${run}` })
+        .expect(201);
+      // discountPercent = 15/200*100 = 7.5%
+      expect(Number(contract.body.lines[0].discountPercent)).toBeCloseTo(7.5, 2);
+    });
+  });
+
   describe('Purchase Order confirmation — no GL / AP / TaxMovement consequence (spec sections 94-97, 110-113)', () => {
     it('confirms a purchase order and leaves the ledger and tax register untouched', async () => {
       const po = await auth1(request(app.getHttpServer()).post(`/organizations/${org1Id}/purchase-orders`))

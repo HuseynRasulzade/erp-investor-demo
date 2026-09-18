@@ -239,6 +239,10 @@ export class PurchaseLineItemDto {
   taxRate?: number;
 
   @IsOptional()
+  @IsNumber()
+  discountAmount?: number;
+
+  @IsOptional()
   @IsBoolean()
   isService?: boolean;
 

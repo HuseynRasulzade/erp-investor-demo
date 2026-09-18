@@ -27,6 +27,7 @@ interface ResolvedPOLine {
   // Qaralama statusunda yadda saxlanıla bilsin"); only
   // PurchaseOrderPostingHandler blocks on it, at confirmation time.
   price: Decimal | null;
+  discountAmount: Decimal;
   taxRate: Decimal;
   lineTotal: Decimal;
   taxAmount: Decimal;
@@ -181,7 +182,7 @@ export class PurchaseOrderService {
     } else if (patch.priceIncludesTax !== undefined) {
       const recomputed = current.lines.map((l: any) => l.price == null
         ? { quantity: new Decimal(l.quantity.toString()), price: null, taxRate: new Decimal(0), lineTotal: new Decimal(0), taxAmount: new Decimal(0), lineTotalWithTax: new Decimal(0) }
-        : computeLineTotals(new Decimal(l.quantity.toString()), new Decimal(l.price.toString()), new Decimal(l.taxRate.toString()), priceIncludesTax));
+        : computeLineTotals(new Decimal(l.quantity.toString()), new Decimal(l.price.toString()), new Decimal(l.taxRate.toString()), priceIncludesTax, new Decimal((l.discountAmount ?? 0).toString())));
       totals = sumDocumentTotals(recomputed);
     }
 
@@ -327,6 +328,9 @@ export class PurchaseOrderService {
       const unit = await this.prisma.unitOfMeasure.findFirst({ where: { id: line.unitId, tenantId } });
       if (!unit) throw new ValidationAppError('Unit of measure not found');
 
+      const discountAmount = new Decimal((line.discountAmount ?? 0).toString());
+      if (!discountAmount.isFinite() || discountAmount.lt(0)) throw new ValidationAppError('Line discount must not be negative');
+
       let price: Decimal | null;
       let priceListId: string | null = null;
       let productPriceId: string | null = null;
@@ -392,11 +396,12 @@ export class PurchaseOrderService {
 
       const computed = price == null
         ? { quantity, price: null as Decimal | null, taxRate: new Decimal(0), lineTotal: new Decimal(0), taxAmount: new Decimal(0), lineTotalWithTax: new Decimal(0) }
-        : computeLineTotals(quantity, price, taxRate, priceIncludesTax);
+        : computeLineTotals(quantity, price, taxRate, priceIncludesTax, discountAmount);
       resolved.push({
         productId: line.productId,
         unitId: line.unitId,
         ...computed,
+        discountAmount,
         priceListId,
         productPriceId,
         isService: line.isService ?? false,
@@ -422,6 +427,7 @@ export class PurchaseOrderService {
           unitId: line.unitId,
           quantity: line.quantity,
           price: line.price,
+          discountAmount: line.discountAmount,
           lineTotal: line.lineTotal,
           taxRate: line.taxRate,
           taxAmount: line.taxAmount,

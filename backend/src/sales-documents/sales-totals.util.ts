@@ -27,9 +27,10 @@ export function computeLineTotals(
   price: Decimal,
   taxRate: Decimal,
   priceIncludesTax: boolean,
+  discountAmount: Decimal = new Decimal(0),
 ): ComputedLine {
   if (priceIncludesTax) {
-    const gross = round2(quantity.mul(price));
+    const gross = round2(quantity.mul(price)).sub(discountAmount);
     const divisor = new Decimal(1).add(taxRate.div(100));
     const net = round2(gross.div(divisor));
     return {
@@ -41,7 +42,7 @@ export function computeLineTotals(
       lineTotalWithTax: gross,
     };
   }
-  const net = round2(quantity.mul(price));
+  const net = round2(quantity.mul(price)).sub(discountAmount);
   const tax = round2(net.mul(taxRate).div(100));
   return {
     quantity,
