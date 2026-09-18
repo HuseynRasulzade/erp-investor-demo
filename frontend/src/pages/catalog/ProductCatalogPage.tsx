@@ -83,6 +83,7 @@ function ProductsTab() {
   const [units, setUnits] = useState<UnitOfMeasure[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -156,6 +157,52 @@ function ProductsTab() {
     }
   };
 
+  const startEdit = (p: Product) => {
+    setEditingId(p.id);
+    setShowForm(false);
+    setName(p.name);
+    setProductType(p.productType);
+    setBaseUnitId(p.baseUnitId);
+    setCategoryId(p.categoryId ?? '');
+    setSku(p.sku ?? '');
+    setBarcode(p.barcode ?? '');
+    setBatchTrackingMode(p.batchTrackingMode);
+    setSerialTrackingMode(p.serialTrackingMode);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    reset();
+  };
+
+  const saveEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!orgId || !editingId) return;
+    const current = products.find((p) => p.id === editingId);
+    if (!current) return;
+    setBusy(true);
+    try {
+      await api.patch<Product>(`/organizations/${orgId}/products/${editingId}`, {
+        expectedVersion: current.version,
+        name,
+        productType,
+        baseUnitId,
+        categoryId: categoryId || undefined,
+        sku: sku || undefined,
+        barcode: barcode || undefined,
+        batchTrackingMode,
+        serialTrackingMode,
+      });
+      showSuccess(t.toast.updatedItem(name));
+      cancelEdit();
+      load();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deactivate = async (p: Product) => {
     if (!orgId) return;
     setBusy(true);
@@ -205,7 +252,13 @@ function ProductsTab() {
                 </button>
               )}
               {hasPermission('product.create') && (
-                <button className="primary" onClick={() => setShowForm((s) => !s)}>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    if (editingId) cancelEdit();
+                    setShowForm((s) => !s);
+                  }}
+                >
                   {showForm ? t.common.cancel : `+ ${t.common.create} ${t.catalog.product}`}
                 </button>
               )}
@@ -295,6 +348,88 @@ function ProductsTab() {
             </form>
           )}
 
+          {editingId && (
+            <form onSubmit={saveEdit} className="card">
+              <div className="inline-form">
+                <label>
+                  {t.common.name}
+                  <input required value={name} onChange={(e) => setName(e.target.value)} />
+                </label>
+                <label>
+                  {t.catalog.productType}
+                  <select value={productType} onChange={(e) => setProductType(e.target.value)}>
+                    {PRODUCT_TYPES.map((pt) => (
+                      <option key={pt} value={pt}>
+                        {pt}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.common.unit}
+                  <select required value={baseUnitId} onChange={(e) => setBaseUnitId(e.target.value)}>
+                    <option value="" disabled>
+                      {t.common.select}
+                    </option>
+                    {units.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.code}
+                        {u.symbol ? ` (${u.symbol})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.catalog.categories}
+                  <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                    <option value="">{t.common.select}</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} — {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  SKU
+                  <input value={sku} onChange={(e) => setSku(e.target.value)} />
+                </label>
+                <label>
+                  {t.catalog.barcode}
+                  <input value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+                </label>
+                <label>
+                  {t.catalog.batchTracking}
+                  <select value={batchTrackingMode} onChange={(e) => setBatchTrackingMode(e.target.value)}>
+                    {TRACKING_MODES.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.catalog.serialTracking}
+                  <select value={serialTrackingMode} onChange={(e) => setSerialTrackingMode(e.target.value)}>
+                    {TRACKING_MODES.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="inline-form">
+                <button type="submit" className="primary" disabled={busy}>
+                  {busy ? t.common.saving : t.common.save}
+                </button>
+                <button type="button" disabled={busy} onClick={cancelEdit}>
+                  {t.common.cancel}
+                </button>
+              </div>
+            </form>
+          )}
+
           {products.length === 0 ? (
             <p className="panel-note">{t.catalog.noProductsYet}</p>
           ) : (
@@ -324,6 +459,18 @@ function ProductsTab() {
                     <td>{p.serialTrackingMode}</td>
                     <td>{p.active ? t.catalog.active : t.catalog.inactive}</td>
                     <td>
+                      {p.active && hasPermission('product.edit') && (
+                        <button
+                          className="small"
+                          disabled={busy}
+                          onClick={() => {
+                            setShowForm(false);
+                            startEdit(p);
+                          }}
+                        >
+                          {t.common.edit}
+                        </button>
+                      )}
                       {p.active && hasPermission('product.deactivate') && (
                         <button className="small" disabled={busy} onClick={() => deactivate(p)}>
                           {t.catalog.deactivate}

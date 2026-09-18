@@ -162,6 +162,8 @@ export class ProductService {
     patch: Partial<ProductInput>,
   ) {
     await this.access.assertAccess(tenantId, membershipId, organizationId);
+    const before = await this.prisma.product.findFirst({ where: { id: productId, organizationId } });
+    if (!before) throw new NotFoundAppError('Product', productId);
     if (patch.productType) this.assertValidType(patch.productType);
     if (patch.categoryId !== undefined) await this.assertCategoryBelongsToOrganization(organizationId, patch.categoryId);
     if (patch.baseUnitId) await this.assertUnitExists(tenantId, patch.baseUnitId);
@@ -205,6 +207,7 @@ export class ProductService {
     });
     if (result.count === 0) throw new ConcurrencyConflictError();
 
+    const oldValues = Object.fromEntries(Object.keys(patch).map((key) => [key, (before as any)[key]]));
     await this.audit.record({
       tenantId,
       eventType: 'PRODUCT_UPDATED',
@@ -212,6 +215,7 @@ export class ProductService {
       entityId: productId,
       action: 'UPDATE',
       userId,
+      oldValues,
       newValues: patch,
     });
 
