@@ -236,6 +236,7 @@ describe('Counterparty bank-account-change control (e2e)', () => {
       .send({ paymentRequestId: requestId, bankAccountId, counterpartyBankAccountId: acc.body.id, currencyId, amount: 100 })
       .expect(201);
     expect(ok.body.counterpartyBankAccountId).toBe(acc.body.id);
+    expect(ok.body.number).toMatch(/^PAYORD-\d{4}-\d+$/);
   });
 
   it('re-flips to PENDING after approval mid-flight and blocks the instruction from being sent to the bank', async () => {

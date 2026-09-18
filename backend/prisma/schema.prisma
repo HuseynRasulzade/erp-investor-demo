@@ -6775,11 +6775,12 @@ model PaymentCalendarItem {
 /// Layer 1->2 bridge (spec sections 23-25) — the internal representation
 /// of a bank order, still NOT bank execution (spec section 25).
 model PaymentInstruction {
-  id               String @id @default(uuid())
-  tenantId         String @map("tenant_id")
-  organizationId   String @map("organization_id")
-  paymentRequestId String @map("payment_request_id")
-  bankAccountId    String @map("bank_account_id")
+  id               String  @id @default(uuid())
+  tenantId         String  @map("tenant_id")
+  organizationId   String  @map("organization_id")
+  paymentRequestId String  @map("payment_request_id")
+  bankAccountId    String  @map("bank_account_id")
+  number           String? @map("number")
 
   // Which of the counterparty's own approved bank accounts this payment
   // goes out to. Nullable: not every payment has a counterparty (tax,

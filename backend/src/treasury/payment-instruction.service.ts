@@ -1,8 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NumberingService } from '../numbering/numbering.service';
 import { AuditService } from '../audit/audit.service';
 import { OrganizationAccessService } from '../org-structure/organization-access.service';
 import { NotFoundAppError, ValidationAppError } from '../common/errors/app-error';
+
+const SEQUENCE_PREFIX = 'PAYORD';
+const SEQUENCE_CODE = 'PAYMENT_INSTRUCTION';
 
 /**
  * PaymentInstructionService (spec sections 23-25). Not a
@@ -16,6 +20,7 @@ import { NotFoundAppError, ValidationAppError } from '../common/errors/app-error
 export class PaymentInstructionService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly numbering: NumberingService,
     private readonly audit: AuditService,
     private readonly access: OrganizationAccessService,
   ) {}
@@ -36,13 +41,29 @@ export class PaymentInstructionService {
       }
     }
 
+    await this.ensureSequence(tenantId);
+    const businessDate = dto.executionDate ? new Date(dto.executionDate) : new Date();
+
     return this.prisma.runInTransaction(async (tx) => {
+      const allocated = await this.numbering.allocateNumber(tenantId, SEQUENCE_CODE, businessDate, tx);
       const row = await tx.paymentInstruction.create({
-        data: { tenantId, organizationId, paymentRequestId: dto.paymentRequestId, bankAccountId: dto.bankAccountId, counterpartyBankAccountId: dto.counterpartyBankAccountId, beneficiaryName: dto.beneficiaryName, beneficiaryBankDetails: dto.beneficiaryBankDetails, currencyId: dto.currencyId, amount: dto.amount.toString(), executionDate: dto.executionDate ? new Date(dto.executionDate) : undefined, purpose: dto.purpose, status: 'DRAFT', createdBy: userId },
+        data: { tenantId, organizationId, number: allocated.formatted, paymentRequestId: dto.paymentRequestId, bankAccountId: dto.bankAccountId, counterpartyBankAccountId: dto.counterpartyBankAccountId, beneficiaryName: dto.beneficiaryName, beneficiaryBankDetails: dto.beneficiaryBankDetails, currencyId: dto.currencyId, amount: dto.amount.toString(), executionDate: dto.executionDate ? new Date(dto.executionDate) : undefined, purpose: dto.purpose, status: 'DRAFT', createdBy: userId },
       });
-      await this.audit.record({ tenantId, eventType: 'PAYMENT_INSTRUCTION_CREATED', entityType: 'PAYMENT_INSTRUCTION', entityId: row.id, action: 'CREATE', userId, newValues: { amount: dto.amount } }, tx);
+      await this.audit.record({ tenantId, eventType: 'PAYMENT_INSTRUCTION_CREATED', entityType: 'PAYMENT_INSTRUCTION', entityId: row.id, action: 'CREATE', userId, newValues: { number: row.number, amount: dto.amount } }, tx);
       return row;
     });
+  }
+
+  private async ensureSequence(tenantId: string) {
+    const existing = await this.prisma.numberSequence.findUnique({ where: { tenantId_code: { tenantId, code: SEQUENCE_CODE } } });
+    if (existing) return;
+    try {
+      await this.prisma.numberSequence.create({
+        data: { tenantId, code: SEQUENCE_CODE, documentType: SEQUENCE_CODE, prefix: SEQUENCE_PREFIX, padding: 6, resetPolicy: 'YEARLY' },
+      });
+    } catch {
+      // Lost the race to create it concurrently.
+    }
   }
 
   async transition(tenantId: string, membershipId: string, organizationId: string, userId: string, id: string, status: string, bankReference?: string) {

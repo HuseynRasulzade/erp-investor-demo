@@ -11,7 +11,7 @@ import { PURCHASE_INVOICE_TYPE } from './purchase-invoice.repository';
 import { CreatePurchaseInvoiceDto, PurchaseInvoiceLineItemDto, UpdatePurchaseInvoiceDto } from './dto/purchase-execution.dto';
 import { PurchaseOrderContractGateService } from '../counterparty-contracts/purchase-order-contract-gate.service';
 
-const SEQUENCE_PREFIX = 'PI';
+const SEQUENCE_PREFIX = 'PINV';
 const SUPPLIER_TYPES = ['SUPPLIER', 'BOTH'];
 const DEFAULT_TAX_CATEGORY = 'STANDARD_VAT';
 

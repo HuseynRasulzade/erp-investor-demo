@@ -6,7 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import { OrganizationAccessService } from '../org-structure/organization-access.service';
 import { NotFoundAppError, ValidationAppError } from '../common/errors/app-error';
 
-const SEQUENCE_PREFIX = 'PR';
+const SEQUENCE_PREFIX = 'PAYREQ';
 const REQUEST_TYPE = 'PAYMENT_REQUEST';
 
 /**

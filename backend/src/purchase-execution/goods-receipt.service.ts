@@ -15,7 +15,7 @@ import { PurchaseOrderContractGateService } from '../counterparty-contracts/purc
 import { PurchaseFulfillmentService } from './purchase-fulfillment.service';
 import { redactGoodsReceiptPrices } from './goods-receipt-redaction.util';
 
-const SEQUENCE_PREFIX = 'GR';
+const SEQUENCE_PREFIX = 'GRN';
 const SUPPLIER_TYPES = ['SUPPLIER', 'BOTH'];
 
 interface ResolvedGRLine {
