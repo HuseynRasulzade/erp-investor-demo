@@ -7,6 +7,8 @@ import { CounterpartyService } from '../counterparty-pricing/counterparty.servic
 import { TaxCalculationService } from '../tax-engine/tax-calculation.service';
 import { TaxRuleNotFoundError, TaxRuleAmbiguousError } from '../common/errors/app-error';
 import { ConcurrencyConflictError, ConflictAppError, NotFoundAppError, ValidationAppError } from '../common/errors/app-error';
+import { DocumentLinkService } from '../document-link/document-link.service';
+import { PURCHASE_ORDER_TYPE } from '../procurement/purchase-order.repository';
 
 export const STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'EXPIRED', 'CANCELLED'];
 const DEFAULT_TAX_CATEGORY = 'STANDARD_VAT';
@@ -33,6 +35,7 @@ export class CounterpartyContractService {
     private readonly access: OrganizationAccessService,
     private readonly counterparties: CounterpartyService,
     private readonly taxCalculation: TaxCalculationService,
+    private readonly documentLinks: DocumentLinkService,
   ) {}
 
   async listForCounterparty(tenantId: string, membershipId: string, organizationId: string, counterpartyId: string) {
@@ -584,6 +587,14 @@ export class CounterpartyContractService {
         sourcePurchaseOrderId: po.id,
       },
     });
+    await this.documentLinks.createLink(tenantId, {
+      sourceDocumentType: PURCHASE_ORDER_TYPE,
+      sourceDocumentId: po.id,
+      targetDocumentType: 'CounterpartyContract',
+      targetDocumentId: contract.id,
+      relationType: 'CREATED_BASED_ON',
+      createdBy: userId,
+    });
 
     for (const [index, { poLine, quantity }] of resolvedLines.entries()) {
       const line = await this.prisma.counterpartyContractLine.create({
@@ -674,6 +685,14 @@ export class CounterpartyContractService {
       },
     });
     if (result.count === 0) throw new ConcurrencyConflictError();
+    await this.documentLinks.createLink(tenantId, {
+      sourceDocumentType: PURCHASE_ORDER_TYPE,
+      sourceDocumentId: po.id,
+      targetDocumentType: 'CounterpartyContract',
+      targetDocumentId: contractId,
+      relationType: 'CREATED_BASED_ON',
+      createdBy: userId,
+    });
 
     const updatedContract = await this.prisma.counterpartyContract.findUnique({ where: { id: contractId } });
     for (const [index, { poLine, quantity }] of resolvedLines.entries()) {

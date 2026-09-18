@@ -445,6 +445,13 @@ describe('Kontragentlər — Contract terms, nomenclature & tax (e2e)', () => {
       expect(line.sourceChain.purchaseOrderLineId).toBe(posted.body.lines[0].id);
       expect(line.sourceChain.purchaseRequirementId).toBe(req.body.id);
       expect(line.sourceChain.purchaseRequirementLineId).toBe(req.body.lines[0].id);
+
+      // The related-documents panel (DocumentLink) must reflect this
+      // auto-created chain step too, not just the line-level sourceChain.
+      const links = await auth1(request(app.getHttpServer()).get(`/document-links?documentType=PURCHASE_ORDER&documentId=${posted.body.id}`)).expect(200);
+      const toContract = links.body.find((l: any) => l.targetDocumentType === 'CounterpartyContract' && l.targetDocumentId === contract.body.id);
+      expect(toContract).toBeTruthy();
+      expect(toContract.relationType).toBe('CREATED_BASED_ON');
     });
 
     it('rejects a purchase order with a blank-price line as a contract source, and excludes it from the eligible-purchase-orders list', async () => {

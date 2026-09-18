@@ -3,6 +3,7 @@ import { AuditModule } from '../audit/audit.module';
 import { OrgStructureModule } from '../org-structure/org-structure.module';
 import { CounterpartyPricingModule } from '../counterparty-pricing/counterparty-pricing.module';
 import { TaxEngineModule } from '../tax-engine/tax-engine.module';
+import { DocumentLinkModule } from '../document-link/document-link.module';
 
 import { CounterpartyContractService } from './counterparty-contract.service';
 import { CounterpartyContractsForCounterpartyController, CounterpartyContractController } from './counterparty-contract.controller';
@@ -23,7 +24,7 @@ import { PurchaseOrderContractGateService } from './purchase-order-contract-gate
  * a contract's owning counterparty. See docs/COUNTERPARTY_MANAGEMENT.md.
  */
 @Module({
-  imports: [AuditModule, OrgStructureModule, CounterpartyPricingModule, TaxEngineModule],
+  imports: [AuditModule, OrgStructureModule, CounterpartyPricingModule, TaxEngineModule, DocumentLinkModule],
   controllers: [
     CounterpartyContractsForCounterpartyController,
     CounterpartyContractController,
