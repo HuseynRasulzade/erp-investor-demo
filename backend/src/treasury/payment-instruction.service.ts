@@ -20,7 +20,7 @@ export class PaymentInstructionService {
     private readonly access: OrganizationAccessService,
   ) {}
 
-  async create(tenantId: string, membershipId: string, organizationId: string, userId: string, dto: { paymentRequestId: string; bankAccountId: string; beneficiaryName?: string; beneficiaryBankDetails?: string; currencyId: string; amount: number; executionDate?: string; purpose?: string }) {
+  async create(tenantId: string, membershipId: string, organizationId: string, userId: string, dto: { paymentRequestId: string; bankAccountId: string; counterpartyBankAccountId?: string; beneficiaryName?: string; beneficiaryBankDetails?: string; currencyId: string; amount: number; executionDate?: string; purpose?: string }) {
     await this.access.assertAccess(tenantId, membershipId, organizationId);
     const request = await this.prisma.paymentRequest.findFirst({ where: { id: dto.paymentRequestId, tenantId, organizationId } });
     if (!request) throw new NotFoundAppError('PaymentRequest', dto.paymentRequestId);
@@ -28,9 +28,17 @@ export class PaymentInstructionService {
       throw new ValidationAppError('A payment instruction can only be created from an approved payment request');
     }
 
+    if (dto.counterpartyBankAccountId) {
+      const account = await this.prisma.counterpartyBankAccount.findFirst({ where: { id: dto.counterpartyBankAccountId, tenantId } });
+      if (!account) throw new NotFoundAppError('CounterpartyBankAccount', dto.counterpartyBankAccountId);
+      if (account.status !== 'APPROVED') {
+        throw new ValidationAppError('Cannot pay to a counterparty bank account that is not approved');
+      }
+    }
+
     return this.prisma.runInTransaction(async (tx) => {
       const row = await tx.paymentInstruction.create({
-        data: { tenantId, organizationId, paymentRequestId: dto.paymentRequestId, bankAccountId: dto.bankAccountId, beneficiaryName: dto.beneficiaryName, beneficiaryBankDetails: dto.beneficiaryBankDetails, currencyId: dto.currencyId, amount: dto.amount.toString(), executionDate: dto.executionDate ? new Date(dto.executionDate) : undefined, purpose: dto.purpose, status: 'DRAFT', createdBy: userId },
+        data: { tenantId, organizationId, paymentRequestId: dto.paymentRequestId, bankAccountId: dto.bankAccountId, counterpartyBankAccountId: dto.counterpartyBankAccountId, beneficiaryName: dto.beneficiaryName, beneficiaryBankDetails: dto.beneficiaryBankDetails, currencyId: dto.currencyId, amount: dto.amount.toString(), executionDate: dto.executionDate ? new Date(dto.executionDate) : undefined, purpose: dto.purpose, status: 'DRAFT', createdBy: userId },
       });
       await this.audit.record({ tenantId, eventType: 'PAYMENT_INSTRUCTION_CREATED', entityType: 'PAYMENT_INSTRUCTION', entityId: row.id, action: 'CREATE', userId, newValues: { amount: dto.amount } }, tx);
       return row;
@@ -41,6 +49,12 @@ export class PaymentInstructionService {
     await this.access.assertAccess(tenantId, membershipId, organizationId);
     const row = await this.prisma.paymentInstruction.findFirst({ where: { id, tenantId, organizationId } });
     if (!row) throw new NotFoundAppError('PaymentInstruction', id);
+    if (['SENT_TO_BANK', 'EXECUTED'].includes(status) && row.counterpartyBankAccountId) {
+      const account = await this.prisma.counterpartyBankAccount.findFirst({ where: { id: row.counterpartyBankAccountId, tenantId } });
+      if (!account || account.status !== 'APPROVED') {
+        throw new ValidationAppError('Cannot send/execute a payment to a counterparty bank account that is not approved');
+      }
+    }
     return this.prisma.paymentInstruction.update({ where: { id }, data: { status, bankReference: bankReference ?? row.bankReference } });
   }
 

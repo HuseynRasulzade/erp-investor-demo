@@ -7,10 +7,11 @@
  * (iban/accountNumber/swiftBic/bankCode/bankName/correspondentAccount)
  * reopens an APPROVED account back to PENDING; a cosmetic-only change
  * (notes) never touches status; approve/reject transitions; and — the
- * actual point of the feature — PaymentOrder refuses to reference an
- * unapproved counterparty bank account, both at creation and again at
- * posting time (see treasury.e2e-spec.ts for the full posting-time
- * re-check, since that needs the full PO->GRN->Invoice fixture chain).
+ * actual point of the feature — PaymentInstruction refuses to reference
+ * an unapproved counterparty bank account, both at creation and again
+ * when transitioning to SENT_TO_BANK/EXECUTED (a later edit can reopen
+ * an already-referenced account to PENDING after the instruction was
+ * created).
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -25,10 +26,12 @@ describe('Counterparty bank-account-change control (e2e)', () => {
   const run = Date.now();
   let token1: string;
   let approverToken: string;
+  let treasuryToken: string;
   let tenant1Id: string;
   let org1Id: string;
   let counterpartyId: string;
   let currencyId: string;
+  let bankAccountId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -48,6 +51,12 @@ describe('Counterparty bank-account-change control (e2e)', () => {
       .send({ counterpartyType: 'SUPPLIER', code: `CPBA-${run}`, name: 'Bank Account Test Supplier' })
       .expect(201);
     counterpartyId = cp.body.id;
+
+    const ownAccount = await prisma.bankAccount.create({
+      data: { tenantId: tenant1Id, organizationId: org1Id, bankName: 'Our Bank', accountName: 'Main AZN', iban: `AZ-OWN-${run}`, currencyId },
+    });
+    bankAccountId = ownAccount.id;
+    treasuryToken = await setupTreasuryUser();
   });
 
   afterAll(async () => {
@@ -85,11 +94,39 @@ describe('Counterparty bank-account-change control (e2e)', () => {
     return reg.body.accessToken;
   }
 
+  async function setupTreasuryUser(): Promise<string> {
+    const email = `cpba-treasury-${run}@e2e.test`;
+    const reg = await request(app.getHttpServer()).post('/auth/register').send({ email, password: 'Test1234!', displayName: 'Treasury User' }).expect(201);
+    const membership = await prisma.tenantMembership.create({ data: { tenantId: tenant1Id, userId: reg.body.userId, status: 'ACTIVE' } });
+    await prisma.organizationAccess.create({ data: { tenantMembershipId: membership.id, organizationId: org1Id, accessLevel: 'FULL' } });
+    const codes = ['treasury.view', 'treasury.payment_request.create', 'treasury.payment_request.approve', 'treasury.payment_plan'];
+    const permissions = await prisma.permission.findMany({ where: { code: { in: codes } } });
+    if (permissions.length !== codes.length) throw new Error('treasury permissions not seeded — run prisma:seed');
+    const role = await prisma.role.create({ data: { tenantId: tenant1Id, code: `CPBA-TREASURY-${run}`, name: 'Treasury User' } });
+    await prisma.membershipRole.create({ data: { membershipId: membership.id, roleId: role.id } });
+    await prisma.rolePermission.createMany({ data: permissions.map((p) => ({ roleId: role.id, permissionId: p.id })) });
+    return reg.body.accessToken;
+  }
+
   function auth1(req: request.Test) {
     return req.set('Authorization', `Bearer ${token1}`).set('X-Tenant-Id', tenant1Id);
   }
   function approverAuth(req: request.Test) {
     return req.set('Authorization', `Bearer ${approverToken}`).set('X-Tenant-Id', tenant1Id);
+  }
+  function treasuryAuth(req: request.Test) {
+    return req.set('Authorization', `Bearer ${treasuryToken}`).set('X-Tenant-Id', tenant1Id);
+  }
+
+  async function createApprovedPaymentRequest(amount = 100): Promise<string> {
+    const req = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests`))
+      .send({ requestDate: '2026-06-01', counterpartyId, currencyId, requestedAmount: amount })
+      .expect(201);
+    await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests/${req.body.id}/submit`)).expect(201);
+    await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests/${req.body.id}/approve`))
+      .send({ approvedAmount: amount })
+      .expect(201);
+    return req.body.id;
   }
 
   it('a new bank account starts PENDING and cannot be used until approved', async () => {
@@ -170,5 +207,50 @@ describe('Counterparty bank-account-change control (e2e)', () => {
       .set('X-Tenant-Id', tenant1Id)
       .send({ expectedVersion: acc.body.version });
     expect(blocked.status).toBe(403);
+  });
+
+  it('a Payment Instruction refuses to pay to a counterparty bank account that is not approved, and accepts one that is', async () => {
+    const acc = await auth1(request(app.getHttpServer()).post(`/organizations/${org1Id}/counterparties/${counterpartyId}/bank-accounts`))
+      .send({ bankName: 'Fifth Bank', accountNumber: `ACC-${run}-5`, currencyId })
+      .expect(201);
+    expect(acc.body.status).toBe('PENDING');
+
+    const requestId = await createApprovedPaymentRequest(100);
+
+    const blocked = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-instructions`))
+      .send({ paymentRequestId: requestId, bankAccountId, counterpartyBankAccountId: acc.body.id, currencyId, amount: 100 });
+    expect(blocked.status).toBe(400);
+
+    await approverAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/counterparties/${counterpartyId}/bank-accounts/${acc.body.id}/approve`))
+      .send({ expectedVersion: acc.body.version })
+      .expect(201);
+
+    const ok = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-instructions`))
+      .send({ paymentRequestId: requestId, bankAccountId, counterpartyBankAccountId: acc.body.id, currencyId, amount: 100 })
+      .expect(201);
+    expect(ok.body.counterpartyBankAccountId).toBe(acc.body.id);
+  });
+
+  it('re-flips to PENDING after approval mid-flight and blocks the instruction from being sent to the bank', async () => {
+    const acc = await auth1(request(app.getHttpServer()).post(`/organizations/${org1Id}/counterparties/${counterpartyId}/bank-accounts`))
+      .send({ bankName: 'Sixth Bank', accountNumber: `ACC-${run}-6`, currencyId })
+      .expect(201);
+    await approverAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/counterparties/${counterpartyId}/bank-accounts/${acc.body.id}/approve`))
+      .send({ expectedVersion: acc.body.version })
+      .expect(201);
+
+    const requestId = await createApprovedPaymentRequest(50);
+    const instr = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-instructions`))
+      .send({ paymentRequestId: requestId, bankAccountId, counterpartyBankAccountId: acc.body.id, currencyId, amount: 50 })
+      .expect(201);
+
+    // A later sensitive-field edit reopens the account to PENDING again.
+    await auth1(request(app.getHttpServer()).patch(`/organizations/${org1Id}/counterparties/${counterpartyId}/bank-accounts/${acc.body.id}`))
+      .send({ iban: 'AZ00NABZ00000000000000005555', expectedVersion: acc.body.version + 1 })
+      .expect(200);
+
+    const sent = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-instructions/${instr.body.id}/transition`))
+      .send({ status: 'SENT_TO_BANK' });
+    expect(sent.status).toBe(400);
   });
 });

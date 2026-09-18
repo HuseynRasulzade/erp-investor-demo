@@ -5120,9 +5120,10 @@ model CounterpartyBankAccount {
   updatedBy String?  @map("updated_by")
   version   Int      @default(1)
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id])
-  counterparty Counterparty @relation(fields: [counterpartyId], references: [id])
-  currency     Currency?    @relation(fields: [currencyId], references: [id])
+  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  counterparty        Counterparty         @relation(fields: [counterpartyId], references: [id])
+  currency            Currency?            @relation(fields: [currencyId], references: [id])
+  paymentInstructions PaymentInstruction[]
 
   @@index([counterpartyId, active])
   @@index([counterpartyId, isPrimary])
@@ -6780,6 +6781,12 @@ model PaymentInstruction {
   paymentRequestId String @map("payment_request_id")
   bankAccountId    String @map("bank_account_id")
 
+  // Which of the counterparty's own approved bank accounts this payment
+  // goes out to. Nullable: not every payment has a counterparty (tax,
+  // payroll). When set, creation is blocked unless the account's own
+  // status is APPROVED — see CounterpartyBankAccount.status comment.
+  counterpartyBankAccountId String? @map("counterparty_bank_account_id")
+
   beneficiaryName        String?   @map("beneficiary_name")
   beneficiaryBankDetails String?   @map("beneficiary_bank_details")
   currencyId             String    @map("currency_id")
@@ -6793,10 +6800,11 @@ model PaymentInstruction {
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
 
-  tenant       Tenant         @relation(fields: [tenantId], references: [id])
-  organization Organization   @relation(fields: [organizationId], references: [id])
-  request      PaymentRequest @relation(fields: [paymentRequestId], references: [id])
-  bankAccount  BankAccount    @relation(fields: [bankAccountId], references: [id])
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
+  organization            Organization             @relation(fields: [organizationId], references: [id])
+  request                 PaymentRequest           @relation(fields: [paymentRequestId], references: [id])
+  bankAccount             BankAccount              @relation(fields: [bankAccountId], references: [id])
+  counterpartyBankAccount CounterpartyBankAccount? @relation(fields: [counterpartyBankAccountId], references: [id])
 
   @@index([tenantId, paymentRequestId])
   @@map("payment_instructions")

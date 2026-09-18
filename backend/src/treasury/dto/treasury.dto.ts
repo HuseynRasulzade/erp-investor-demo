@@ -27,6 +27,7 @@ export class ApproveRequestDto {
 export class CreatePaymentInstructionDto {
   @IsString() paymentRequestId!: string;
   @IsString() bankAccountId!: string;
+  @IsOptional() @IsString() counterpartyBankAccountId?: string;
   @IsOptional() @IsString() beneficiaryName?: string;
   @IsOptional() @IsString() beneficiaryBankDetails?: string;
   @IsString() currencyId!: string;

@@ -48,6 +48,12 @@ export class ShipmentService {
     if (dto.customerOrderId) {
       const order = await this.prisma.salesOrder.findFirst({ where: { id: dto.customerOrderId, organizationId } });
       if (!order) throw new NotFoundAppError('SalesOrder', dto.customerOrderId);
+      // postingStatus=POSTED IS the order's confirmed state (see
+      // SalesOrderPostingHandler's docstring) — a shipment against an
+      // order that was never confirmed has nothing to fulfill yet.
+      if (order.postingStatus !== 'POSTED') {
+        throw new ValidationAppError('Cannot ship against a Sales Order that has not been confirmed (posted)');
+      }
     }
 
     const businessDate = parseDate(dto.documentDate);

@@ -104,6 +104,18 @@ export class TreasuryController {
     return this.instructions.create(tenantId, membershipId, organizationId, user.userId, dto);
   }
 
+  @RequirePermissions(PermissionCodes.TREASURY_PAYMENT_PLAN)
+  @Get('payment-instructions')
+  listInstructions(@CurrentTenantId() tenantId: string, @Param('organizationId') organizationId: string, @Query('paymentRequestId') paymentRequestId?: string) {
+    return this.instructions.list(tenantId, organizationId, paymentRequestId);
+  }
+
+  @RequirePermissions(PermissionCodes.TREASURY_PAYMENT_PLAN)
+  @Post('payment-instructions/:id/transition')
+  transitionInstruction(@CurrentTenantId() tenantId: string, @CurrentMembershipId() membershipId: string, @Param('organizationId') organizationId: string, @Param('id') id: string, @CurrentUser() user: { userId: string }, @Body() dto: { status: string; bankReference?: string }) {
+    return this.instructions.transition(tenantId, membershipId, organizationId, user.userId, id, dto.status, dto.bankReference);
+  }
+
   // --- Calendar / Liquidity (Layer 1) ---
 
   @RequirePermissions(PermissionCodes.TREASURY_PAYMENT_PLAN)
