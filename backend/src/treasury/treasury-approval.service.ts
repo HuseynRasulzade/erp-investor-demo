@@ -42,6 +42,12 @@ export class TreasuryApprovalService {
     const request = await this.prisma.paymentRequest.findFirst({ where: { id: requestId, tenantId, organizationId } });
     if (!request) throw new NotFoundAppError('PaymentRequest', requestId);
     if (!['PENDING_APPROVAL', 'PARTIALLY_APPROVED'].includes(request.status)) throw new ValidationAppError(`Cannot approve a request in status ${request.status}`);
+    // Segregation of duties: whoever requested the payment cannot also be
+    // the one who approves it — same rule the approval-workflow module
+    // enforces for Purchase Requirement/Order (ApprovalService.approve).
+    if (request.createdBy && request.createdBy === userId) {
+      throw new ValidationAppError('Cannot approve a payment request you created yourself');
+    }
 
     const rule = await this.resolveRule(tenantId, organizationId, request.paymentCategory, new Decimal(request.requestedAmount.toString()));
     if (rule) {

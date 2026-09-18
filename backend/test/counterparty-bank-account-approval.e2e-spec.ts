@@ -6,12 +6,14 @@
  * Covers: a new bank account starts PENDING; changing a sensitive field
  * (iban/accountNumber/swiftBic/bankCode/bankName/correspondentAccount)
  * reopens an APPROVED account back to PENDING; a cosmetic-only change
- * (notes) never touches status; approve/reject transitions; and — the
+ * (notes) never touches status; approve/reject transitions; — the
  * actual point of the feature — PaymentInstruction refuses to reference
  * an unapproved counterparty bank account, both at creation and again
  * when transitioning to SENT_TO_BANK/EXECUTED (a later edit can reopen
  * an already-referenced account to PENDING after the instruction was
- * created).
+ * created); and segregation of duties on the payment chain itself — a
+ * requester cannot approve their own Payment Request, and an approver
+ * cannot also be the one who sends the resulting payment to the bank.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -27,6 +29,7 @@ describe('Counterparty bank-account-change control (e2e)', () => {
   let token1: string;
   let approverToken: string;
   let treasuryToken: string;
+  let treasuryApproverToken: string;
   let tenant1Id: string;
   let org1Id: string;
   let counterpartyId: string;
@@ -56,7 +59,8 @@ describe('Counterparty bank-account-change control (e2e)', () => {
       data: { tenantId: tenant1Id, organizationId: org1Id, bankName: 'Our Bank', accountName: 'Main AZN', iban: `AZ-OWN-${run}`, currencyId },
     });
     bankAccountId = ownAccount.id;
-    treasuryToken = await setupTreasuryUser();
+    treasuryToken = await setupTreasuryUser('cpba-treasury');
+    treasuryApproverToken = await setupTreasuryUser('cpba-treasury-approver');
   });
 
   afterAll(async () => {
@@ -94,15 +98,15 @@ describe('Counterparty bank-account-change control (e2e)', () => {
     return reg.body.accessToken;
   }
 
-  async function setupTreasuryUser(): Promise<string> {
-    const email = `cpba-treasury-${run}@e2e.test`;
+  async function setupTreasuryUser(slug: string): Promise<string> {
+    const email = `${slug}-${run}@e2e.test`;
     const reg = await request(app.getHttpServer()).post('/auth/register').send({ email, password: 'Test1234!', displayName: 'Treasury User' }).expect(201);
     const membership = await prisma.tenantMembership.create({ data: { tenantId: tenant1Id, userId: reg.body.userId, status: 'ACTIVE' } });
     await prisma.organizationAccess.create({ data: { tenantMembershipId: membership.id, organizationId: org1Id, accessLevel: 'FULL' } });
     const codes = ['treasury.view', 'treasury.payment_request.create', 'treasury.payment_request.approve', 'treasury.payment_plan'];
     const permissions = await prisma.permission.findMany({ where: { code: { in: codes } } });
     if (permissions.length !== codes.length) throw new Error('treasury permissions not seeded — run prisma:seed');
-    const role = await prisma.role.create({ data: { tenantId: tenant1Id, code: `CPBA-TREASURY-${run}`, name: 'Treasury User' } });
+    const role = await prisma.role.create({ data: { tenantId: tenant1Id, code: `${slug.toUpperCase()}-${run}`, name: 'Treasury User' } });
     await prisma.membershipRole.create({ data: { membershipId: membership.id, roleId: role.id } });
     await prisma.rolePermission.createMany({ data: permissions.map((p) => ({ roleId: role.id, permissionId: p.id })) });
     return reg.body.accessToken;
@@ -117,13 +121,16 @@ describe('Counterparty bank-account-change control (e2e)', () => {
   function treasuryAuth(req: request.Test) {
     return req.set('Authorization', `Bearer ${treasuryToken}`).set('X-Tenant-Id', tenant1Id);
   }
+  function treasuryApproverAuth(req: request.Test) {
+    return req.set('Authorization', `Bearer ${treasuryApproverToken}`).set('X-Tenant-Id', tenant1Id);
+  }
 
   async function createApprovedPaymentRequest(amount = 100): Promise<string> {
     const req = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests`))
       .send({ requestDate: '2026-06-01', counterpartyId, currencyId, requestedAmount: amount })
       .expect(201);
     await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests/${req.body.id}/submit`)).expect(201);
-    await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests/${req.body.id}/approve`))
+    await treasuryApproverAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests/${req.body.id}/approve`))
       .send({ approvedAmount: amount })
       .expect(201);
     return req.body.id;
@@ -252,5 +259,32 @@ describe('Counterparty bank-account-change control (e2e)', () => {
     const sent = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-instructions/${instr.body.id}/transition`))
       .send({ status: 'SENT_TO_BANK' });
     expect(sent.status).toBe(400);
+  });
+
+  it('segregation of duties: a requester cannot approve their own payment request, and an approver cannot send that same payment to the bank', async () => {
+    const req = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests`))
+      .send({ requestDate: '2026-06-01', counterpartyId, currencyId, requestedAmount: 75 })
+      .expect(201);
+    await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests/${req.body.id}/submit`)).expect(201);
+
+    const selfApprove = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests/${req.body.id}/approve`))
+      .send({ approvedAmount: 75 });
+    expect(selfApprove.status).toBe(400);
+
+    await treasuryApproverAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-requests/${req.body.id}/approve`))
+      .send({ approvedAmount: 75 })
+      .expect(201);
+
+    const instr = await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-instructions`))
+      .send({ paymentRequestId: req.body.id, bankAccountId, currencyId, amount: 75 })
+      .expect(201);
+
+    const selfSend = await treasuryApproverAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-instructions/${instr.body.id}/transition`))
+      .send({ status: 'SENT_TO_BANK' });
+    expect(selfSend.status).toBe(400);
+
+    await treasuryAuth(request(app.getHttpServer()).post(`/organizations/${org1Id}/treasury/payment-instructions/${instr.body.id}/transition`))
+      .send({ status: 'SENT_TO_BANK' })
+      .expect(201);
   });
 });

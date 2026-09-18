@@ -55,6 +55,16 @@ export class PaymentInstructionService {
         throw new ValidationAppError('Cannot send/execute a payment to a counterparty bank account that is not approved');
       }
     }
+    if (status === 'SENT_TO_BANK') {
+      // Segregation of duties: whoever approved the underlying Payment
+      // Request cannot also be the one who sends it to the bank.
+      const approval = await this.prisma.paymentApproval.findFirst({
+        where: { paymentRequestId: row.paymentRequestId, decision: { in: ['APPROVED', 'PARTIALLY_APPROVED'] }, approverUserId: userId },
+      });
+      if (approval) {
+        throw new ValidationAppError('Cannot send a payment to the bank that you yourself approved');
+      }
+    }
     return this.prisma.paymentInstruction.update({ where: { id }, data: { status, bankReference: bankReference ?? row.bankReference } });
   }
 
