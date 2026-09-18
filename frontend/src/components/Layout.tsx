@@ -224,6 +224,12 @@ export function Layout() {
               {t.nav.bankPayments}
             </NavLink>
           )}
+          {hasPermission('treasury.view') && (
+            <NavLink to="/payment-requests">
+              <span className="nav-icon">📝</span>
+              {t.nav.paymentRequests}
+            </NavLink>
+          )}
           {hasPermission('cash.view') && (
             <NavLink to="/cash-payments">
               <span className="nav-icon">💵</span>

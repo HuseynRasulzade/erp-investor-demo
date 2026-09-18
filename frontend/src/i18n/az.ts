@@ -38,6 +38,7 @@ const az: Translations = {
     generalLedger: 'Baş Kitab',
     manualJournal: 'Əl ilə Mühasibat Yazılışı',
     bankPayments: 'Bank Ödənişləri',
+    paymentRequests: 'Ödəniş Tələbləri',
     cashPayments: 'Kassa Ödənişləri',
     fixedAssets: 'Əsas Vəsaitlər',
     organizations: 'Təşkilatlar',

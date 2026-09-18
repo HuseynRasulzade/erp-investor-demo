@@ -9,6 +9,7 @@ import { useOrganization } from '../../context/OrganizationContext';
 import { useToast } from '../../context/ToastContext';
 import { useLocale } from '../../i18n/LocaleContext';
 import { ApprovalStepsPanel } from '../docs/ApprovalStepsPanel';
+import { AccountingEntriesPanel } from '../docs/AccountingEntriesPanel';
 
 const LINE_TYPES = ['INVENTORY', 'SERVICE', 'EXPENSE', 'FIXED_ASSET', 'PREPAYMENT', 'OTHER'];
 
@@ -521,6 +522,8 @@ export function PurchaseInvoiceDetailPage() {
           onChanged={load}
         />
       )}
+
+      {orgId && <AccountingEntriesPanel orgId={orgId} documentType="PURCHASE_INVOICE" documentId={doc.id} />}
 
       {matching && (
         <section className="card">

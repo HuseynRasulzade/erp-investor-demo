@@ -62,6 +62,7 @@ import { ManualJournalPage } from './pages/accounting/ManualJournalPage';
 
 // Treasury / Cash (Phase 13-14)
 import { TreasuryPaymentsPage } from './pages/treasury/TreasuryPaymentsPage';
+import { PaymentRequestsPage } from './pages/treasury/PaymentRequestsPage';
 import { CashPaymentsPage } from './pages/treasury/CashPaymentsPage';
 
 // Fixed Assets (Phase 16)
@@ -147,6 +148,7 @@ function AppRoutes() {
         <Route path="/manual-journal" element={<ManualJournalPage />} />
 
         <Route path="/bank-payments" element={<TreasuryPaymentsPage />} />
+        <Route path="/payment-requests" element={<PaymentRequestsPage />} />
         <Route path="/cash-payments" element={<CashPaymentsPage />} />
         <Route path="/fixed-assets" element={<FixedAssetsPage />} />
 

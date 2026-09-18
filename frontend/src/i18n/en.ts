@@ -36,6 +36,7 @@ const en = {
     generalLedger: 'General Ledger',
     manualJournal: 'Manual Journal',
     bankPayments: 'Bank Payments',
+    paymentRequests: 'Payment Requests',
     cashPayments: 'Cash Payments',
     fixedAssets: 'Fixed Assets',
     organizations: 'Organizations',
